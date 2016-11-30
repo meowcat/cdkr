@@ -10,10 +10,19 @@
   method may fail. See CDK Javadocs for more information
 }
 \usage{
-get.smiles(molecule)
+get.smiles(molecule, type = 'generic', aromatic = FALSE, atomClasses = FALSE)
 }
 \arguments{
   \item{molecule}{A Java object of class \code{IAtomContainer}}
+  \item{type}{The type of SMILES to output. Possible values are
+  \enumerate{
+  \item generic - non-canonical SMILES string, different atom ordering produces different SMILES. No isotope or stereochemistry encoded.
+  \item unique - canonical SMILES string, different atom ordering produces the same* SMILES. No isotope or stereochemistry encoded.
+  \item isomeric - non-canonical SMILES string, different atom ordering produces different SMILES. Isotope and stereochemistry is encoded.
+  \item absolute - canonical SMILES string, different atom ordering produces the same SMILES. Isotope and stereochemistry is encoded.
+  }}
+  \item{aromatic}{If \code{TRUE} aromatic SMILES are generated. The default is to output Kekule form}
+  \item{atomClasses}{If \code{TRUE} include atom classes.}
 }
 \value{
   An R character object containing the SMILES

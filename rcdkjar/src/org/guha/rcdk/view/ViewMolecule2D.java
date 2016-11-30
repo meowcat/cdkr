@@ -2,10 +2,11 @@ package org.guha.rcdk.view;
 
 import org.guha.rcdk.util.Misc;
 import org.guha.rcdk.view.panels.MoleculeCell;
-import org.openscience.cdk.aromaticity.CDKHueckelAromaticityDetector;
+import org.openscience.cdk.DefaultChemObjectBuilder;
 import org.openscience.cdk.exception.CDKException;
 import org.openscience.cdk.graph.ConnectivityChecker;
 import org.openscience.cdk.interfaces.IAtomContainer;
+import org.openscience.cdk.smiles.SmilesParser;
 import org.openscience.cdk.tools.manipulator.AtomContainerManipulator;
 
 import javax.swing.*;
@@ -38,11 +39,6 @@ public class ViewMolecule2D extends JFrame {
 
         if (!ConnectivityChecker.isConnected(molecule)) throw new CDKException("Molecule must be connected");
         molecule = AtomContainerManipulator.removeHydrogens(molecule);
-        try {
-            CDKHueckelAromaticityDetector.detectAromaticity(molecule);
-        } catch (CDKException e) {
-            throw new Exception("Error in aromatcity detection");
-        }
         molecule = Misc.getMoleculeWithCoordinates(molecule);
         panel = new MoleculeCell(molecule, width, height);
         setTitle("2D Viewer");
@@ -61,14 +57,17 @@ public class ViewMolecule2D extends JFrame {
         String[] fname = {home + "src/cdkr/data/dan001.sdf",
                 home + "src/cdkr/data/dan002.sdf",
                 home + "src/cdkr/data/dan003.sdf"};
-        IAtomContainer[] acs = null;
-        try {
-            acs = Misc.loadMolecules(fname, true, true, true);
-        } catch (CDKException e) {
-            e.printStackTrace();
-        }
+//        IAtomContainer[] acs = null;
+//        try {
+//            acs = Misc.loadMolecules(fname, true, true, true);
+//        } catch (CDKException e) {
+//            e.printStackTrace();
+//        }
+        SmilesParser sp = new SmilesParser(DefaultChemObjectBuilder.getInstance());
+        sp.kekulise(false);
+        IAtomContainer mol = sp.parseSmiles("c1ccccc1");
 
-        ViewMolecule2D v2d = new ViewMolecule2D(acs[1]);
+        ViewMolecule2D v2d = new ViewMolecule2D(mol);
 
         v2d.draw();
     }

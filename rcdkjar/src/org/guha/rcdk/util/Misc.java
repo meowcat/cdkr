@@ -6,8 +6,10 @@ package org.guha.rcdk.util;
 import org.guha.rcdk.view.MoleculeImage;
 import org.openscience.cdk.DefaultChemObjectBuilder;
 import org.openscience.cdk.aromaticity.CDKHueckelAromaticityDetector;
-import org.openscience.cdk.config.IsotopeFactory;
+import org.openscience.cdk.config.Isotopes;
 import org.openscience.cdk.exception.CDKException;
+import org.openscience.cdk.inchi.InChIGenerator;
+import org.openscience.cdk.inchi.InChIGeneratorFactory;
 import org.openscience.cdk.interfaces.IAtom;
 import org.openscience.cdk.interfaces.IAtomContainer;
 import org.openscience.cdk.interfaces.IChemFile;
@@ -17,6 +19,7 @@ import org.openscience.cdk.io.ReaderFactory;
 import org.openscience.cdk.io.SDFWriter;
 import org.openscience.cdk.io.SMILESReader;
 import org.openscience.cdk.io.listener.PropertiesListener;
+import org.openscience.cdk.isomorphism.UniversalIsomorphismTester;
 import org.openscience.cdk.layout.StructureDiagramGenerator;
 import org.openscience.cdk.smiles.SmilesGenerator;
 import org.openscience.cdk.smiles.SmilesParser;
@@ -102,10 +105,15 @@ public class Misc {
      * @param container The molecule to convert
      * @return A SMILES string
      */
-    public static String getSmiles(IAtomContainer container) {
-        SmilesGenerator sg = new SmilesGenerator();
-        sg.setUseAromaticityFlag(true);
-        return sg.createSMILES(container);
+    public static String getSmiles(IAtomContainer container, String type, boolean aromatic, boolean atomClasses) throws CDKException {
+        SmilesGenerator smigen;
+        if (type.equals("generic")) smigen = SmilesGenerator.generic();
+        else if (type.equals("unique")) smigen = SmilesGenerator.unique();
+        else if (type.equals("isomeric")) smigen = SmilesGenerator.isomeric();
+        else smigen = SmilesGenerator.absolute();
+        if (aromatic) smigen = smigen.aromatic();
+        if (atomClasses) smigen = smigen.withAtomClasses();
+        return smigen.create(container);
     }
 
     /**
@@ -162,6 +170,16 @@ public class Misc {
             retValues[i] = v.get(i);
         }
 
+        if (doTyping) {
+            for (int i = 0; i < retValues.length; i++) {
+                try {
+                    AtomContainerManipulator.percieveAtomTypesAndConfigureAtoms(retValues[i]);
+                } catch (CDKException e) {
+                    retValues[i] = null;
+                }
+            }
+        }
+
         // before returning, lets make see if we
         // need to perceive aromaticity and atom typing
         if (doAromaticity) {
@@ -174,18 +192,8 @@ public class Misc {
             }
         }
 
-        if (doTyping) {
-            for (int i = 0; i < retValues.length; i++) {
-                try {
-                    AtomContainerManipulator.percieveAtomTypesAndConfigureAtoms(retValues[i]);
-                } catch (CDKException e) {
-                    retValues[i] = null;
-                }
-            }
-        }
-
         if (doIsotopes) {
-            IsotopeFactory ifac = IsotopeFactory.getInstance(DefaultChemObjectBuilder.getInstance());
+            Isotopes ifac = Isotopes.getInstance();
             for (IAtomContainer retValue : retValues) {
                 ifac.configureAtoms(retValue);
             }
@@ -199,6 +207,20 @@ public class Misc {
         sdg.setMolecule(molecule);
         sdg.generateCoordinates();
         return sdg.getMolecule();
+    }
+
+    public static IAtomContainer getMcsAsNewContainerUIT(IAtomContainer mol1, IAtomContainer mol2) throws CDKException, CloneNotSupportedException {
+        UniversalIsomorphismTester uit = new UniversalIsomorphismTester();
+        List<IAtomContainer> overlaps = uit.getOverlaps(mol1, mol2);
+        int maxmcss = -9999999;
+        IAtomContainer maxac = null;
+        for (IAtomContainer ac : overlaps) {
+            if (ac.getAtomCount() > maxmcss) {
+                maxmcss = ac.getAtomCount();
+                maxac = ac;
+            }
+        }
+        return maxac;
     }
 
     public static IAtomContainer getMcsAsNewContainer(IAtomContainer mol1, IAtomContainer mol2) throws CDKException, CloneNotSupportedException {
@@ -241,8 +263,25 @@ public class Misc {
         return mapping;
     }
 
+    public static String getInChi(IAtomContainer mol) throws CDKException {
+        InChIGeneratorFactory factory = InChIGeneratorFactory.getInstance();
+        factory.setIgnoreAromaticBonds(true);
+        InChIGenerator gen = factory.getInChIGenerator(mol);
+        return gen.getInchi();
+    }
+
+    public static String getInChiKey(IAtomContainer mol) throws CDKException {
+        InChIGeneratorFactory factory = InChIGeneratorFactory.getInstance();
+        factory.setIgnoreAromaticBonds(true);
+        InChIGenerator gen = factory.getInChIGenerator(mol);
+        return gen.getInchiKey();
+    }
+
     public static void main(String[] args) throws Exception, CloneNotSupportedException, IOException {
+        IAtomContainer[] mols = Misc.loadMolecules(new String[]{"/Users/guhar/Downloads/Benzene.sdf"}, true, true, true);
+
         SmilesParser sp = new SmilesParser(DefaultChemObjectBuilder.getInstance());
+
         IAtomContainer mol1 = sp.parseSmiles("c1cccc(COC(=O)NC(CC(C)C)C(=O)NC(CCc2ccccc2)C(=O)COC)c1");
         IAtomContainer mol2 = sp.parseSmiles("c1cccc(COC(=O)NC(CC(C)C)C(=O)NCC#N)c1");
         CDKHueckelAromaticityDetector.detectAromaticity(mol1);

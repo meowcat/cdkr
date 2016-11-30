@@ -1,8 +1,11 @@
 .packageName <- "rcdk"
 
-## .First.lib code taken from iPlots
-
-require(rJava, quietly=TRUE)
+.get.chem.object.builder <- function() {
+  dcob <- .jcall("org/openscience/cdk/DefaultChemObjectBuilder",
+                 "Lorg/openscience/cdk/interfaces/IChemObjectBuilder;",
+                 "getInstance")
+  return(dcob)
+}
 
 .check.class <- function(obj, klass) {
   attr(obj, "jclass") == klass
@@ -31,8 +34,31 @@ require(rJava, quietly=TRUE)
   jar.rcdk <- paste(lib,pkg,"cont","rcdk.jar",sep=.Platform$file.sep)
   jar.png <- paste(lib,pkg,"cont","com.objectplanet.image.PngEncoder.jar",sep=.Platform$file.sep)
   .jinit(classpath=c(jar.rcdk,jar.png))
-}
+  
+  #check Java Version 
+  jversion <- .jcall("java/lang/System", "S", "getProperty", "java.runtime.version")
+  jversionmajor <- as.numeric(paste0(strsplit(jversion, "\\.")[[1]][1], collapse = "."))
+  try(jversionminor <- as.numeric(paste0(strsplit(jversion, "\\.")[[1]][2], collapse = ".")))
+  isjavagood <- jversionmajor >=7 || (jversionmajor==1 && jversionminor >= 7)
+  
+  if (isjavagood == FALSE) { stop("
+=================
+=================
+This version of rCDK uses a CDK library that requires Java 7 or greater. 
 
+Please install Java 7 and let R know which Java to use by running the config tool:
+
+sudo R CMD javareconf
+
+Then you will need to re-install rJava.
+
+# re-install from R
+# install.packages('rJava', type='source')
+
+=================
+=================")  
+  }
+}
 
 cdk.version <- function() {
   .jcall("org.openscience.cdk.CDK", "S", "getVersion")
@@ -138,9 +164,7 @@ convert.implicit.to.explicit <- function(molecule) {
   }
   if (any(is.null(unlist(lapply(get.atoms(molecule), .jcall, returnSig = "Ljava/lang/Integer;", method="getImplicitHydrogenCount"))))) {
     ## add them in
-    dcob <- .jcall("org/openscience/cdk/DefaultChemObjectBuilder",
-                   "Lorg/openscience/cdk/interfaces/IChemObjectBuilder;",
-                   "getInstance")
+    dcob <- .get.chem.object.builder()
     hadder <- .jcall("org/openscience/cdk/tools/CDKHydrogenAdder", "Lorg/openscience/cdk/tools/CDKHydrogenAdder;",
                      "getInstance", dcob)
     .jcall(hadder, "V", "addImplicitHydrogens", molecule)
@@ -149,56 +173,6 @@ convert.implicit.to.explicit <- function(molecule) {
 }
 
 
-get.fingerprint <- function(molecule, type = 'standard', depth=6, size=1024, verbose=FALSE) {
-  if (is.null(attr(molecule, 'jclass'))) stop("Must supply an IAtomContainer or something coercable to it")
-  if (attr(molecule, "jclass") != "org/openscience/cdk/interfaces/IAtomContainer") {
-    ## try casting it
-    molecule <- .jcast(molecule, "org/openscience/cdk/interfaces/IAtomContainer")
-  }
-
-  mode(size) <- 'integer'
-  mode(depth) <- 'integer'
-  
-  fingerprinter <-
-    switch(type,
-           standard = .jnew('org/openscience/cdk/fingerprint/Fingerprinter', size, depth),
-           extended = .jnew('org/openscience/cdk/fingerprint/ExtendedFingerprinter', size, depth),
-           graph = .jnew('org/openscience/cdk/fingerprint/GraphOnlyFingerprinter', size, depth),
-           maccs = .jnew('org/openscience/cdk/fingerprint/MACCSFingerprinter'),
-           pubchem = .jnew('org/openscience/cdk/fingerprint/PubchemFingerprinter'),
-           estate = .jnew('org/openscience/cdk/fingerprint/EStateFingerprinter'),
-           hybridization = .jnew('org/openscience/cdk/fingerprint/HybridizationFingerprinter', size, depth),
-           ##lingo = .jnew('org/openscience/cdk/fingerprint/LingoFingerprinter', depth),
-           kr = .jnew('org/openscience/cdk/fingerprint/KlekotaRothFingerprinter'),
-           shortestpath = .jnew('org/openscience/cdk/fingerprint/ShortestPathFingerprinter', size)
-           )
-  if (is.null(fingerprinter)) stop("Invalid fingerprint type specified")
-  
-  ibitfp <- .jcall(fingerprinter,
-                   "Lorg/openscience/cdk/fingerprint/IBitFingerprint;",
-                   "getBitFingerprint", molecule, check=FALSE)
-  
-  e <- .jgetEx()
-  if (.jcheck(silent=TRUE)) {
-    if (verbose) print(e)
-    return(NULL)
-  }
-
-  bitset <- .jcall(ibitfp, "Ljava/util/BitSet;", "asBitSet")
-  
-  if (type == 'maccs') nbit <- 166
-  else if (type == 'estate') nbit <- 79
-  else if (type == 'pubchem') nbit <- 881
-  else if (type == 'kr') nbit <- 4860
-  else nbit <- size
-  
-  bitset <- .jcall(bitset, "S", "toString")
-  s <- gsub('[{}]','', bitset)
-  s <- strsplit(s, split=',')[[1]]
-  moltitle <- get.property(molecule, 'Title')
-  if (is.na(moltitle)) moltitle <- ''
-  return(new("fingerprint", nbit=nbit, bits=as.numeric(s)+1, provider="CDK", name=moltitle))
-}
 
 get.atoms <- function(object) {
   if (is.null(attr(object, 'jclass')))
@@ -254,12 +228,9 @@ do.isotopes <- function(molecule) {
     stop("molecule must be of class IAtomContainer")
   if (attr(molecule, 'jclass') != "org/openscience/cdk/interfaces/IAtomContainer")
     stop("molecule must be of class IAtomContainer")
-
-  builder <- .jcall(.jnew('org/openscience/cdk/ChemObject'),
-                    'Lorg/openscience/cdk/interfaces/IChemObjectBuilder;', 'getBuilder')
-  ifac <- .jcall('org.openscience.cdk.config.IsotopeFactory',
-                 'Lorg/openscience/cdk/config/IsotopeFactory;',
-                 'getInstance', builder)
+  ifac <- .jcall('org.openscience.cdk.config.Isotopes',
+                 'Lorg/openscience/cdk/config/Isotopes;',
+                 'getInstance')
   .jcall(ifac, 'V', 'configureAtoms', molecule)
 }
 
@@ -317,4 +288,13 @@ get.title <- function(molecule) {
   if (attr(molecule, 'jclass') != "org/openscience/cdk/interfaces/IAtomContainer")
     stop("molecule must be of class IAtomContainer")
   get.property(molecule, "cdk:Title")
+}
+
+generate.2d.coordinates <- function(molecule) {
+  if (is.null(attr(molecule, 'jclass')))
+    stop("molecule must be of class IAtomContainer")
+  if (attr(molecule, 'jclass') != "org/openscience/cdk/interfaces/IAtomContainer")
+    stop("molecule must be of class IAtomContainer")
+  .jcall('org/guha/rcdk/util/Misc', 'Lorg/openscience/cdk/interfaces/IAtomContainer;',
+         'getMoleculeWithCoordinates', molecule)
 }

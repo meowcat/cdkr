@@ -47,7 +47,11 @@ setMethod("distance", c("featvec", "featvec", "character", "missing", "missing")
             method <- match.arg(method)
             n1 <- length(fp1)
             n2 <- length(fp2)
-            n12 <- length(intersect(fp1@features, fp2@features))
+            ## extract the feature strings, ignoring counts for now
+            f1 <- sapply(fp1@features, function(x) x@feature)
+            f2 <- sapply(fp2@features, function(x) x@feature)
+            
+            n12 <- length(intersect(f1,f2))
             if (method == 'tanimoto') {
               return(n12/(n1+n2-n12))
             } else if (method == "robust") {
@@ -122,7 +126,7 @@ setMethod("distance", c("fingerprint", "fingerprint", "character", "missing", "m
               f1[fp1@bits] <- 1
               f2[fp2@bits] <- 1
               sim <- 0.0
-              ret <-  .C("fpdistance", as.double(f1), as.double(f1),
+              ret <-  .C("fpdistance", as.double(f1), as.double(f2),
                          as.integer(n), as.integer(2),
                          as.double(sim),
                          PACKAGE="fingerprint")

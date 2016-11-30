@@ -187,9 +187,9 @@ generate.formula <- function(mass, window=0.01,
   
   chemObject <- .cdkFormula.createChemObject();
   range <- .jnew("org/openscience/cdk/formula/MolecularFormulaRange");
-  ifac <- .jcall("org/openscience/cdk/config/IsotopeFactory",
-                 "Lorg/openscience/cdk/config/IsotopeFactory;",
-                 "getInstance",chemObject);
+  ifac <- .jcall("org/openscience/cdk/config/Isotopes",
+                 "Lorg/openscience/cdk/config/Isotopes;",
+                 "getInstance");
   
   for (i in 1:length(elements)) {
     isotope <- .jcall(ifac,
@@ -312,4 +312,29 @@ generate.formula <- function(mass, window=0.01,
   object@isotopes <- isotopeList;
   
   return(object);
+}
+
+get.isotope.pattern.similarity <- function(tol = NULL) {
+  ips <- .jnew("org/openscience/cdk/formula/IsotopePatternSimilarity")
+  if (!is.null(tol)) ips$seTolerance(tol)
+  return(ips)
+}
+
+get.isotope.pattern.generator <- function(minAbundance = NULL) {
+  if (is.null(minAbundance))
+    .jnew("org/openscience/cdk/formula/IsotopePatternGenerator")
+  else
+    .jnew("org/openscience/cdk/formula/IsotopePatternGenerator", as.double(minAbundance))
+}
+
+compare.isotope.pattern <- function(iso1, iso2, ips = NULL) {
+  cls <- unique(c(class(iso1), class(iso2)))
+  if (length(cls) != 1) stop("Must supply Java objects of class IsotopePattern")
+  if (cls != 'jobjRef') stop("Must supply Java objects of class IsotopePattern")
+  if(attr(iso1, "jclass") != "org/openscience/cdk/formula/IsotopePattern" ||
+     attr(iso2, "jclass") != "org/openscience/cdk/formula/IsotopePattern") {
+    stop("Must supply an IsotopePattern")
+  }
+  if (is.null(ips)) ips <- get.isotope.pattern.similarity()
+  return(ips$compare(iso1, iso2))
 }

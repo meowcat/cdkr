@@ -6,9 +6,7 @@ iload.molecules<- function(molfile, type = 'smi', aromaticity = TRUE, typing = T
     stop(paste(molfile, ": Does not exist", sep=''))
 
   fr <- .jnew("java/io/FileReader", as.character(molfile))
-  dcob <- .jcall("org/openscience/cdk/DefaultChemObjectBuilder",
-                 "Lorg/openscience/cdk/interfaces/IChemObjectBuilder;",
-                 "getInstance")
+  dcob <- .get.chem.object.builder()
   if (type == 'smi') {
     sreader <- .jnew("org/openscience/cdk/io/iterator/IteratingSMILESReader",.jcast(fr, "java/io/Reader"), dcob)
   } else if (type == 'sdf') {
@@ -30,8 +28,6 @@ iload.molecules<- function(molfile, type = 'smi', aromaticity = TRUE, typing = T
   
   nextEl <- function() {
     mol <<- .jcall(sreader, "Ljava/lang/Object;", "next")
-    print(class(mol))
-    print("----")
     mol <<- .jcast(mol, "org/openscience/cdk/interfaces/IAtomContainer")
     if (aromaticity) do.aromaticity(mol)
     if (typing) do.typing(mol)

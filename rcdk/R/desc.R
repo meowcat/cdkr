@@ -1,6 +1,6 @@
 .get.desc.values <- function(dval, nexpected) {
   if (!inherits(dval, "jobjRef")) {
-    if (is.na(dval)) return(NA)
+    if (is.null(dval) || is.na(dval)) return(NA)
   }
 
   if (!is.null(.jcall(dval, "Ljava/lang/Exception;", "getException"))) {
@@ -8,6 +8,10 @@
   }
   
   nval <- numeric()
+  if (!inherits(dval,'jobjRef') && is.na(dval)) {
+    return(NA)
+  }
+  
   result <- .jcall(dval, "Lorg/openscience/cdk/qsar/result/IDescriptorResult;", "getValue")
   methods <- .jmethods(result)
 
@@ -35,8 +39,16 @@
   if (!(type %in% c('molecular', 'atomic', 'bond'))) {
     stop('type must bond, molecular or atomic')
   }
-  type <- match(type, c('atomic', 'bond', 'molecular'))
-  dengine <- .jnew('org/openscience/cdk/qsar/DescriptorEngine', as.integer(type))
+  if (type == 'molecular') {
+    interface <- J("org.openscience.cdk.qsar.IMolecularDescriptor")
+  } else if (type == 'atomic') {
+    interface <- J("org.openscience.cdk.qsar.IAtomicDescriptor")    
+  } else if (type == 'bond') {
+    interface <- J("org.openscience.cdk.qsar.IBondDescriptor")        
+  }
+  dklass <- interface@jobj
+  dcob <- .get.chem.object.builder()
+  dengine <- .jnew('org/openscience/cdk/qsar/DescriptorEngine', dklass, dcob)
   attr(dengine, 'descType') <- type
   pkg <- c('org.openscience.cdk.qsar.descriptors.atomic',
            'org.openscience.cdk.qsar.descriptors.bond',
@@ -96,14 +108,19 @@ eval.desc <- function(molecules, which.desc, verbose = FALSE) {
     }
   }
 
+  dcob <- .get.chem.object.builder()
+  
   if (length(which.desc) == 1) {
     desc <- .jnew(which.desc)
+    .jcall(desc, "V", "initialise", dcob)
     
     dnames <- .jcall(desc, "[Ljava/lang/String;", "getDescriptorNames")
     dnames <- gsub('-', '.', dnames)
     
     descvals <- lapply(molecules, function(a,b) {
-      .jcall(b, "Lorg/openscience/cdk/qsar/DescriptorValue;", "calculate", a)
+      val <- tryCatch({.jcall(b, "Lorg/openscience/cdk/qsar/DescriptorValue;", "calculate", a)},
+                      warning = function(e) return(NA),
+                      error = function(e) return(NA))
     }, b=desc)
 
     vals <- lapply(descvals, .get.desc.values, nexpected = length(dnames))
@@ -118,16 +135,25 @@ eval.desc <- function(molecules, which.desc, verbose = FALSE) {
       if (verbose) { cat("Processing ", gsub('org.openscience.cdk.qsar.descriptors.molecular.', '', desc)
                          , "\n") }
       desc <- .jnew(desc)
-
+      .jcall(desc, "V", "initialise", dcob)
+      
       dnames <- .jcall(desc, "[Ljava/lang/String;", "getDescriptorNames")
       dnames <- gsub('-', '.', dnames)
-      
-      descvals <- lapply(molecules, function(a) {
-        .jcall(desc, "Lorg/openscience/cdk/qsar/DescriptorValue;", "calculate", a, check=FALSE)
-      })
+
+      descvals <- lapply(molecules, function(a, check) {
+        val <- tryCatch({.jcall(desc, "Lorg/openscience/cdk/qsar/DescriptorValue;", "calculate", a, check=check)})
+      }, check=FALSE)
+
       vals <- lapply(descvals, .get.desc.values, nexpected = length(dnames))
       vals <- data.frame(do.call('rbind', vals))
+
+      if (length(vals) == 1 && is.na(vals)) {
+        vals <- as.data.frame(matrix(NA, nrow=1, ncol=length(dnames)))
+      }
+      
       names(vals) <- dnames
+      ## idx <- which(is.na(names(vals)))
+      ## if (length(idx) > 0) vals <- vals[,-idx]
       
       dl[[counter]] <- vals
       counter <- counter + 1
